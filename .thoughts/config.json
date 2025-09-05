@@ -1,0 +1,89 @@
+{
+  "version": "1.0",
+  "mount_dirs": {
+    "repository": "context",
+    "personal": "personal"
+  },
+  "requires": [
+    {
+      "remote": "git@github.com:allisoneer/personal_thoughts.git",
+      "mount_path": "general",
+      "subpath": "projects/standalone_tools",
+      "description": "Repository mount for standalone_tools",
+      "optional": false,
+      "sync": "auto"
+    },
+    {
+      "remote": "git@github.com:tauri-apps/tauri-docs.git",
+      "mount_path": "references/tauri-docs",
+      "description": "Repository mount for references/tauri-docs",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:tauri-apps/tauri.git",
+      "mount_path": "references/tauri",
+      "description": "Repository mount for references/tauri",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:allisoneer/personal_thoughts.git",
+      "mount_path": "tickets",
+      "subpath": "all_personal/tickets",
+      "description": "Repository mount for tickets",
+      "optional": false,
+      "sync": "auto"
+    },
+    {
+      "remote": "git@github.com:64bit/async-openai.git",
+      "mount_path": "references/async-openai",
+      "description": "Repository mount for references/async-openai",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:RustAudio/cpal.git",
+      "mount_path": "references/cpal",
+      "description": "Repository mount for references/cpal",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:ruuda/hound.git",
+      "mount_path": "references/hound",
+      "description": "Repository mount for references/hound",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:tauri-apps/tauri-plugin-shell.git",
+      "mount_path": "references/tauri-plugin-shell",
+      "description": "Repository mount for references/tauri-plugin-shell",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:tauri-apps/awesome-tauri.git",
+      "mount_path": "references/awesome-tauri",
+      "description": "Repository mount for references/awesome-tauri",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:tauri-apps/tauri-plugin-websocket.git",
+      "mount_path": "references/tauri-plugin-websocket",
+      "description": "Repository mount for references/tauri-plugin-websocket",
+      "optional": true,
+      "sync": "none"
+    },
+    {
+      "remote": "git@github.com:ayangweb/tauri-plugin-mic-recorder.git",
+      "mount_path": "references/tauri-plugin-mic-recorder",
+      "description": "Repository mount for references/tauri-plugin-mic-recorder",
+      "optional": true,
+      "sync": "none"
+    }
+  ],
+  "rules": []
+}
