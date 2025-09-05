@@ -22,45 +22,6 @@ pub mod linux {
     unsafe impl Send for SafeStream {}
     unsafe impl Sync for SafeStream {}
     
-    // TODO: This is a PLACEHOLDER implementation due to thread safety issues with CPAL
-    //
-    // WHAT WAS TRIED:
-    // 1. Full CPAL implementation with Stream stored in a struct field
-    // 2. Using Arc<Mutex<Option<StreamHandle>>> to share the stream between threads
-    // 3. Spawning a background thread to handle the CPAL stream lifecycle
-    //
-    // WHAT WENT WRONG:
-    // - CPAL's Stream type doesn't implement Send on all platforms (specifically Linux with ALSA/JACK)
-    // - This is due to platform-specific handles that contain raw pointers (*mut ())
-    // - The error: "`*mut ()` cannot be sent between threads safely"
-    // - This prevents storing the Stream in Arc<Mutex<>> for sharing between async contexts
-    //
-    // ATTEMPTED SOLUTION:
-    // Tried to keep the Stream alive in a dedicated thread and communicate via channels:
-    // ```rust
-    // std::thread::spawn(move || {
-    //     let _stream = stream;  // Keep stream alive
-    //     while let Ok(cmd) = rx.recv() {
-    //         match cmd {
-    //             StreamCommand::Stop => break,
-    //             StreamCommand::Pause => _stream.pause().ok(),
-    //             // etc...
-    //         }
-    //     }
-    // });
-    // ```
-    // This also failed because Stream doesn't implement Send, so it can't be moved into the thread.
-    //
-    // PROPER SOLUTION (NOT IMPLEMENTED):
-    // The correct approach would be to:
-    // 1. Create the CPAL stream on a dedicated thread that owns it for its entire lifetime
-    // 2. Use channels to send commands TO that thread
-    // 3. Use channels to receive audio data FROM that thread
-    // 4. Never try to move the Stream between threads
-    //
-    // This would require a more complex architecture with persistent background threads
-    // managed by the application lifecycle.
-    
     pub struct LinuxAudioRecorder {
         state: Arc<Mutex<RecordingState>>,
         stream: Arc<Mutex<Option<SafeStream>>>,
