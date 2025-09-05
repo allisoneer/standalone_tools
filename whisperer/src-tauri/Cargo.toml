@@ -1,0 +1,53 @@
+[package]
+name = "whisperer"
+version = "0.1.0"
+description = "Audio recording and transcription app"
+authors = ["allison"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "whisperer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["devtools"] }
+# TODO: Add required Tauri features based on capabilities used:
+# - "protocol-asset" for asset loading if needed
+# - Other features as required by the app
+tauri-plugin-store = "2.0"
+tauri-plugin-fs = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.6", features = ["v4", "serde"] }
+async-trait = "0.1"
+tokio = { version = "1", features = ["full"] }
+async-openai = "0.20"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+cpal = "0.15"
+hound = "3.5"
+
+# TODO: Android audio plugin dependency
+# [target.'cfg(target_os = "android")'.dependencies]
+# tauri-plugin-audio = { path = "./tauri-plugin-audio" }
+#
+# This needs to be uncommented once the plugin is properly created.
+# The plugin structure should be:
+# tauri-plugin-audio/
+# ├── Cargo.toml
+# ├── src/lib.rs
+# ├── android/
+# │   ├── build.gradle
+# │   └── src/main/java/com/whisperer/audio/AudioRecorderPlugin.kt
+# └── tauri-plugin.json
+
+
