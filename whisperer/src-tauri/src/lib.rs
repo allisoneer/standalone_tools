@@ -31,10 +31,27 @@ pub fn run() {
         .setup(|app| {
             let (app_state, init_data) = common::initialize_app_components(app.handle())?;
             
-            // Mobile can now also use eager initialization if desired
-            app_state.initialize_transcription_blocking(init_data)?;
+            // Clone AppHandle for async initialization
+            let app_handle = app.handle().clone();
             
+            // Manage state immediately
             app.manage(app_state);
+            
+            // Spawn async initialization if API key is present
+            if let Some(api_key) = init_data.api_key 
+                && !api_key.is_empty() {
+                let base_url = init_data.base_url;
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = crate::state::AppState::<tauri::Wry>::initialize_transcription_async(
+                        app_handle,
+                        api_key,
+                        Some(base_url),
+                    ).await {
+                        eprintln!("Failed to initialize transcription service: {}", e);
+                    }
+                });
+            }
+            
             Ok(())
         })
         .invoke_handler(crate::register_app_commands!())

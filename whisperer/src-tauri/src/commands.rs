@@ -109,8 +109,19 @@ pub async fn transcribe_recording(
 
     // Get transcription service
     let service_lock = state.transcription_service.lock().await;
-    let service = service_lock.as_ref()
-        .ok_or("Transcription service not configured. Please set API key in settings.")?;
+    let service = if let Some(svc) = service_lock.as_ref() {
+        svc
+    } else {
+        // Check if API key exists in settings
+        let settings_manager = state.settings_manager.lock().await;
+        let settings = settings_manager.load();
+        let error_msg = if settings.api_key.is_none() || settings.api_key.as_ref().unwrap().is_empty() {
+            "Transcription service not configured. Please set API key in settings."
+        } else {
+            "Transcription service is initializing. Please try again in a moment."
+        };
+        return Err(error_msg.to_string());
+    };
 
     // Load audio file
     let recordings_dir = StorageManager::recordings_dir(&app)
@@ -206,16 +217,15 @@ pub async fn save_settings(
     settings: AppSettings,
 ) -> Result<(), String> {
     // Validate settings
-    if let Some(api_key) = &settings.api_key {
-        if !api_key.is_empty() {
-            // Update transcription service
-            state.update_transcription_service(
-                api_key.clone(),
-                settings.base_url.clone(),
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-        }
+    if let Some(api_key) = &settings.api_key 
+        && !api_key.is_empty() {
+        // Update transcription service
+        state.update_transcription_service(
+            api_key.clone(),
+            settings.base_url.clone(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
     }
 
     // Save settings

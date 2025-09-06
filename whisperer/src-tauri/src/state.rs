@@ -4,6 +4,7 @@ use crate::{
     transcription::TranscriptionService,
 };
 use std::sync::Arc;
+use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::Mutex;
 
 pub struct InitData {
@@ -39,16 +40,31 @@ impl<R: tauri::Runtime> AppState<R> {
         Ok(())
     }
     
-    pub fn initialize_transcription_blocking(
-        &self, 
-        init_data: InitData
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(api_key) = init_data.api_key {
-            if !api_key.is_empty() {
-                let service = TranscriptionService::new(api_key, init_data.base_url);
-                *self.transcription_service.blocking_lock() = Some(service);
+
+    pub async fn initialize_transcription_async<T: Runtime>(
+        app_handle: AppHandle<T>,
+        api_key: String,
+        base_url: Option<String>,
+    ) -> Result<(), String> {
+        // Create service in a panic-safe way
+        let service = match std::panic::catch_unwind(|| {
+            TranscriptionService::new(api_key, base_url.unwrap_or_default())
+        }) {
+            Ok(service) => service,
+            Err(_) => {
+                return Err("Failed to create transcription service".to_string());
+            }
+        };
+        
+        // Get app state and update service
+        match app_handle.try_state::<AppState<T>>() {
+            Some(state) => {
+                *state.transcription_service.lock().await = Some(service);
+                Ok(())
+            }
+            None => {
+                Err("Failed to access app state".to_string())
             }
         }
-        Ok(())
     }
 }
