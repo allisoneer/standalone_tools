@@ -36,18 +36,7 @@ async-openai = "0.20"
 cpal = "0.15"
 hound = "3.5"
 
-# TODO: Android audio plugin dependency
-# [target.'cfg(target_os = "android")'.dependencies]
-# tauri-plugin-audio = { path = "./tauri-plugin-audio" }
-#
-# This needs to be uncommented once the plugin is properly created.
-# The plugin structure should be:
-# tauri-plugin-audio/
-# ├── Cargo.toml
-# ├── src/lib.rs
-# ├── android/
-# │   ├── build.gradle
-# │   └── src/main/java/com/whisperer/audio/AudioRecorderPlugin.kt
-# └── tauri-plugin.json
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-audio = { path = "./tauri-plugin-audio" }
 
 

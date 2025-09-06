@@ -1,0 +1,3 @@
+[[permission]]
+identifier = "allow-microphone"
+description = "Enables microphone access for audio recording"
