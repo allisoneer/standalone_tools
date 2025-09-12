@@ -1,12 +1,20 @@
 use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RecordingState {
     Idle,
     Recording,
     Paused,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AudioDevice {
+    pub id: String,
+    pub name: String,
+    pub is_default: bool,
 }
 
 #[async_trait]

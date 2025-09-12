@@ -27,6 +27,7 @@ pub mod linux {
         stream: Arc<Mutex<Option<SafeStream>>>,
         audio_samples: Arc<Mutex<Vec<i16>>>,
         sample_rate: u32,
+        preferred_device: Option<String>,
     }
 
     impl LinuxAudioRecorder {
@@ -36,18 +37,54 @@ pub mod linux {
                 stream: Arc::new(Mutex::new(None)),
                 audio_samples: Arc::new(Mutex::new(Vec::new())),
                 sample_rate: 16000, // Fixed 16kHz for Groq optimization
+                preferred_device: None,
+            })
+        }
+        
+        pub fn with_preferred_device(preferred_device: Option<String>) -> Result<Self, Box<dyn std::error::Error>> {
+            Ok(Self {
+                state: Arc::new(Mutex::new(RecordingState::Idle)),
+                stream: Arc::new(Mutex::new(None)),
+                audio_samples: Arc::new(Mutex::new(Vec::new())),
+                sample_rate: 16000, // Fixed 16kHz for Groq optimization
+                preferred_device,
             })
         }
         
         fn find_working_input_device(&self, host: &cpal::Host) -> Result<cpal::Device, Box<dyn std::error::Error>> {
-            // Priority order for Linux audio devices
+            // First, try user's preferred device if specified
+            if let Some(ref preferred) = self.preferred_device {
+                eprintln!("Trying user's preferred device: {}", preferred);
+                if let Ok(devices) = host.input_devices() {
+                    for device in devices {
+                        if let Ok(name) = device.name() {
+                            if name == *preferred && device.supported_input_configs().is_ok() {
+                                eprintln!("Successfully selected preferred device: {}", name);
+                                return Ok(device);
+                            }
+                        }
+                    }
+                }
+                eprintln!("Preferred device '{}' not available, falling back...", preferred);
+            }
+            
+            // Second, try system default (changed from last resort)
+            eprintln!("Trying system default input device...");
+            if let Some(device) = host.default_input_device() {
+                if device.supported_input_configs().is_ok() {
+                    if let Ok(name) = device.name() {
+                        eprintln!("Successfully selected system default: {}", name);
+                    }
+                    return Ok(device);
+                }
+            }
+            
+            // Then try preferred backends by name
             let preferred_names = vec![
                 "pipewire",  // Modern Linux audio
                 "pulse",     // PulseAudio
-                "default",   // System default (might work)
             ];
             
-            // First, try preferred devices by name
             for pref_name in &preferred_names {
                 eprintln!("Trying to use '{}' device...", pref_name);
                 if let Ok(devices) = host.input_devices() {
@@ -81,14 +118,6 @@ pub mod linux {
                             }
                         }
                     }
-                }
-            }
-            
-            // Last resort: try system default
-            eprintln!("Trying system default input device as last resort...");
-            if let Some(device) = host.default_input_device() {
-                if device.supported_input_configs().is_ok() {
-                    return Ok(device);
                 }
             }
             

@@ -41,6 +41,16 @@ impl<R: tauri::Runtime> AppState<R> {
     }
     
 
+    pub async fn update_audio_device_preference(
+        &self,
+        device_name: Option<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // This would require recreating the audio recorder
+        // For now, the preference will be applied on next recording
+        // In a future enhancement, we could support hot-swapping
+        Ok(())
+    }
+
     pub async fn initialize_transcription_async<T: Runtime>(
         app_handle: AppHandle<T>,
         api_key: String,

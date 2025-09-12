@@ -7,6 +7,7 @@ pub struct AppSettings {
     pub api_key: Option<String>,
     pub base_url: String,
     pub model: String,
+    pub selected_audio_device: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -15,6 +16,7 @@ impl Default for AppSettings {
             api_key: None,
             base_url: "https://api.groq.com/openai/v1".to_string(),
             model: "whisper-large-v3-turbo".to_string(),
+            selected_audio_device: None,
         }
     }
 }

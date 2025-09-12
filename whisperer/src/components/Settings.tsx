@@ -1,17 +1,21 @@
 import { useState, useEffect } from "react";
-import { settingsApi } from "../api";
-import type { AppSettings } from "../types";
+import { settingsApi, audioApi } from "../api";
+import type { AppSettings, AudioDevice } from "../types";
 
 export function Settings({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<AppSettings>({
     api_key: "",
     base_url: "https://api.groq.com/openai/v1",
     model: "whisper-large-v3-turbo",
+    selected_audio_device: undefined,
   });
+  const [audioDevices, setAudioDevices] = useState<AudioDevice[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(true);
 
   useEffect(() => {
     loadSettings();
+    loadAudioDevices();
   }, []);
 
   const loadSettings = async () => {
@@ -20,6 +24,19 @@ export function Settings({ onClose }: { onClose: () => void }) {
       setSettings(loaded);
     } catch (error) {
       console.error("Failed to load settings:", error);
+    }
+  };
+
+  const loadAudioDevices = async () => {
+    try {
+      setIsLoadingDevices(true);
+      const devices = await audioApi.listDevices();
+      setAudioDevices(devices);
+    } catch (error) {
+      console.error("Failed to load audio devices:", error);
+      // Continue without device selection if enumeration fails
+    } finally {
+      setIsLoadingDevices(false);
     }
   };
 
@@ -66,6 +83,27 @@ export function Settings({ onClose }: { onClose: () => void }) {
             value={settings.base_url}
             onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
           />
+        </div>
+        
+        <div className="form-group">
+          <label htmlFor="audio-device">Audio Input Device:</label>
+          <select
+            id="audio-device"
+            value={settings.selected_audio_device || "system-default"}
+            onChange={(e) => setSettings({ 
+              ...settings, 
+              selected_audio_device: e.target.value === "system-default" ? undefined : e.target.value 
+            })}
+            disabled={isLoadingDevices}
+          >
+            <option value="system-default">System Default</option>
+            {audioDevices.map(device => (
+              <option key={device.id} value={device.id}>
+                {device.name} {device.is_default ? "(System Default)" : ""}
+              </option>
+            ))}
+          </select>
+          {isLoadingDevices && <small>Loading audio devices...</small>}
         </div>
         
         <div className="form-group">
