@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { audioApi } from "../api";
 import type { RecordingState } from "../types";
+import { FileUploadButton } from './FileUploadButton';
 
 export function RecordingControls({ onRecordingComplete }: { 
   onRecordingComplete: () => void 
@@ -74,13 +75,19 @@ export function RecordingControls({ onRecordingComplete }: {
   return (
     <div className="recording-controls">
       {state === "Idle" && (
-        <button 
-          onClick={handleStart} 
-          disabled={isLoading}
-          className="btn-primary"
-        >
-          Start Recording
-        </button>
+        <div className="controls-idle">
+          <button 
+            onClick={handleStart} 
+            disabled={isLoading}
+            className="btn-primary"
+          >
+            {isLoading ? "Starting..." : "Start Recording"}
+          </button>
+          <FileUploadButton 
+            onUploadComplete={onRecordingComplete}
+            disabled={isLoading}
+          />
+        </div>
       )}
       
       {state === "Recording" && (

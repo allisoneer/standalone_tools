@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Recording, AppSettings, RecordingState } from "./types";
+import type { Recording, AppSettings, RecordingState, AudioDevice } from "./types";
 
 export const audioApi = {
   startRecording: () => invoke("start_recording"),
@@ -7,6 +7,19 @@ export const audioApi = {
   pauseRecording: () => invoke("pause_recording"),
   resumeRecording: () => invoke("resume_recording"),
   getRecordingState: () => invoke<RecordingState>("get_recording_state"),
+  listDevices: () => invoke<AudioDevice[]>("list_audio_devices"),
+  
+  async uploadFile(fileData: ArrayBuffer, filename: string): Promise<Recording> {
+    const uint8Array = new Uint8Array(fileData);
+    return invoke<Recording>("upload_audio_file", {
+      fileData: Array.from(uint8Array),
+      originalFilename: filename,
+    });
+  },
+  
+  async getMaxUploadSize(): Promise<number> {
+    return invoke<number>("get_max_upload_size");
+  },
 };
 
 export const recordingsApi = {

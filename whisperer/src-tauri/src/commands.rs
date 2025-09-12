@@ -1,10 +1,13 @@
 use crate::{
+    audio::AudioDevice,
+    audio_processor::AudioProcessor,
     settings::AppSettings,
-    storage::{Recording, StorageManager, Transcription},
+    storage::{Recording, RecordingSource, StorageManager, Transcription},
     state::AppState,
 };
 use chrono::Utc;
 use tauri::State;
+use cpal::traits::{DeviceTrait, HostTrait};
 
 #[tauri::command]
 pub async fn start_recording(
@@ -32,16 +35,19 @@ pub async fn stop_recording(
     let filename = StorageManager::save_audio(&app, &audio_data, "wav")
         .map_err(|e| e.to_string())?;
 
+    // Calculate duration
+    let duration = StorageManager::calculate_wav_duration(&audio_data);
+    
     // Create recording entry
     let recording = Recording {
         id: uuid::Uuid::new_v4().to_string(),
         filename,
-        duration_seconds: None, // TODO: Calculate from audio data
-        // To implement: Parse WAV header to get sample count, divide by sample rate
-        // For 16-bit mono at 16kHz: duration = (audio_data.len() - 44) / 2 / 16000
-        // where 44 is the WAV header size and we divide by 2 for 16-bit samples
+        duration_seconds: duration,
         created_at: Utc::now(),
         transcription: None,
+        source: RecordingSource::Recorded,
+        original_filename: None,
+        original_format: None,
     };
 
     // Update metadata
@@ -84,6 +90,43 @@ pub async fn get_recording_state(
     let recorder = audio_manager.recorder.lock().await;
     let recording_state = recorder.get_state();
     Ok(format!("{:?}", recording_state))
+}
+
+#[tauri::command]
+pub async fn list_audio_devices() -> Result<Vec<AudioDevice>, String> {
+    let host = cpal::default_host();
+    let mut devices = vec![];
+    
+    // Get the default device name for comparison
+    let default_device_name = host.default_input_device()
+        .and_then(|d| d.name().ok());
+    
+    // Enumerate all input devices
+    if let Ok(input_devices) = host.input_devices() {
+        for device in input_devices {
+            if let Ok(name) = device.name() {
+                // Only include devices that support input configurations
+                if device.supported_input_configs().is_ok() {
+                    devices.push(AudioDevice {
+                        id: name.clone(),
+                        name: name.clone(),
+                        is_default: default_device_name.as_ref() == Some(&name),
+                    });
+                }
+            }
+        }
+    }
+    
+    // Sort devices: default first, then alphabetically
+    devices.sort_by(|a, b| {
+        match (a.is_default, b.is_default) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.cmp(&b.name),
+        }
+    });
+    
+    Ok(devices)
 }
 
 #[tauri::command]
@@ -231,5 +274,64 @@ pub async fn save_settings(
     // Save settings
     let settings_manager = state.settings_manager.lock().await;
     settings_manager.save(&settings)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    
+    // Note: Audio device preference will be applied on next recording start
+    // since we can't change device mid-recording
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn upload_audio_file(
+    app: tauri::AppHandle<tauri::Wry>,
+    file_data: Vec<u8>,
+    original_filename: String,
+) -> Result<Recording, String> {
+    // Detect format from filename
+    let extension = std::path::Path::new(&original_filename)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .unwrap_or("unknown");
+    
+    // Convert to WAV if needed
+    let wav_data = if extension.eq_ignore_ascii_case("wav") {
+        file_data
+    } else {
+        AudioProcessor::convert_to_wav(file_data, Some(&original_filename))
+            .map_err(|e| format!("Failed to convert audio: {}", e))?
+    };
+    
+    // Calculate duration
+    let duration = StorageManager::calculate_wav_duration(&wav_data);
+    
+    // Save the converted file
+    let filename = StorageManager::save_audio(&app, &wav_data, "wav")
+        .map_err(|e| e.to_string())?;
+    
+    // Create recording entry
+    let recording = Recording {
+        id: uuid::Uuid::new_v4().to_string(),
+        filename,
+        duration_seconds: duration,
+        created_at: Utc::now(),
+        transcription: None,
+        source: RecordingSource::Uploaded,
+        original_filename: Some(original_filename.clone()),
+        original_format: Some(extension.to_string()),
+    };
+    
+    // Update metadata
+    let mut recordings = StorageManager::list_recordings(&app)
+        .map_err(|e| e.to_string())?;
+    recordings.push(recording.clone());
+    StorageManager::save_metadata(&app, &recordings)
+        .map_err(|e| e.to_string())?;
+    
+    Ok(recording)
+}
+
+#[tauri::command]
+pub fn get_max_upload_size() -> u32 {
+    25 * 1024 * 1024 // 25MB
 }

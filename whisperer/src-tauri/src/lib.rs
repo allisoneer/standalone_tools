@@ -1,6 +1,7 @@
 
 // Re-export all modules needed for both desktop and mobile
 mod audio;
+mod audio_processor;
 mod commands;
 mod common;
 mod settings;

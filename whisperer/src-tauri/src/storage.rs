@@ -3,6 +3,13 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum RecordingSource {
+    Recorded,
+    Uploaded,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recording {
     pub id: String,
@@ -10,6 +17,14 @@ pub struct Recording {
     pub duration_seconds: Option<f64>,
     pub created_at: DateTime<Utc>,
     pub transcription: Option<Transcription>,
+    #[serde(default = "default_source")]
+    pub source: RecordingSource,
+    pub original_filename: Option<String>,
+    pub original_format: Option<String>,
+}
+
+fn default_source() -> RecordingSource {
+    RecordingSource::Recorded
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -29,6 +44,27 @@ impl StorageManager {
         let recordings_dir = app_dir.join("recordings");
         std::fs::create_dir_all(&recordings_dir)?;
         Ok(recordings_dir)
+    }
+    
+    pub fn calculate_wav_duration(audio_data: &[u8]) -> Option<f64> {
+        if audio_data.len() < 44 {
+            return None;
+        }
+        
+        // Parse WAV header to get sample rate and data size
+        let sample_rate = u32::from_le_bytes([
+            audio_data[24], audio_data[25], 
+            audio_data[26], audio_data[27]
+        ]);
+        
+        let data_size = u32::from_le_bytes([
+            audio_data[40], audio_data[41], 
+            audio_data[42], audio_data[43]
+        ]);
+        
+        // Calculate duration: data_size / (sample_rate * bytes_per_sample * channels)
+        // For 16-bit mono: bytes_per_sample = 2, channels = 1
+        Some(data_size as f64 / (sample_rate as f64 * 2.0))
     }
 
     pub fn save_audio<R: tauri::Runtime>(

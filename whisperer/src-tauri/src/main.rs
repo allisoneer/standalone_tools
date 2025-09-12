@@ -5,6 +5,7 @@
 mod common;
 
 mod audio;
+mod audio_processor;
 mod commands;
 mod settings;
 mod state;

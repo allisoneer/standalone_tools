@@ -12,7 +12,9 @@ pub fn initialize_app_components<R: Runtime>(
     #[cfg(target_os = "linux")]
     let audio_recorder = {
         use crate::linux_audio::linux::LinuxAudioRecorder;
-        Box::new(LinuxAudioRecorder::new()?) as Box<dyn crate::audio::AudioRecorder>
+        Box::new(LinuxAudioRecorder::with_preferred_device(
+            settings.selected_audio_device.clone()
+        )?) as Box<dyn crate::audio::AudioRecorder>
     };
 
     #[cfg(target_os = "android")]
@@ -53,6 +55,9 @@ macro_rules! register_app_commands {
             crate::commands::delete_recording,
             crate::commands::get_settings,
             crate::commands::save_settings,
+            crate::commands::list_audio_devices,
+            crate::commands::upload_audio_file,
+            crate::commands::get_max_upload_size,
         ]
     };
 }
