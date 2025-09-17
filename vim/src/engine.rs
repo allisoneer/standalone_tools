@@ -690,6 +690,14 @@ impl Engine {
                             return (selection.0, result);
                         }
                     }
+                    KeyCode::Char('f') => {
+                        self.pending = PendingKey::F { before: false };
+                        return (cursor, vec![]);
+                    }
+                    KeyCode::Char('t') => {
+                        self.pending = PendingKey::F { before: true };
+                        return (cursor, vec![]);
+                    }
                     _ => {
                         // Unknown key in visual mode
                         return (cursor, vec![]);
