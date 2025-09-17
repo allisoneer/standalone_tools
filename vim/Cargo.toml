@@ -1,0 +1,13 @@
+[package]
+name = "vim_mini"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+unicode-segmentation = "1.10"
+bitflags = "2.4"
+
+[dev-dependencies]
+proptest = "1.5"
+ropey = "1.6"
+criterion = "0.5"

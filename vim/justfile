@@ -1,0 +1,79 @@
+# Rust component justfile
+
+set dotenv-load := true
+
+# We use `just` commands for all of our execution. For example, `just vim/check` and `just
+# vim/test` could be used for the bulk of the validation commands we need.
+
+ci := env("CI", "false")
+output_mode := env("OUTPUT_MODE", if ci == "true" { "normal" } else { "minimal" })
+
+# Shell configuration
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+# Command execution based on output mode
+
+exec := if output_mode == "minimal" { "../tools/agent-wrap " } else if output_mode == "json" { "../tools/agent-wrap " } else { "" }
+
+# Default recipe
+default:
+    @just --list
+
+# Run all checks
+check: fmt-check
+    {{ exec }}cargo check --workspace --all-targets
+    {{ exec }}cargo clippy --all-targets --all-features -- -D warnings
+    {{ exec }}cargo machete
+
+# that profiles can't do for us? Why are we using it?
+test:
+    {{ exec }}cargo test --workspace --all-targets
+
+# Run tests for specific package
+test-package package:
+    {{ exec }}cargo test --package {{ package }} --all-targets
+
+# Build debug
+build:
+    {{ exec }}cargo build --workspace --all-targets
+
+# Run specific binary
+run binary *args:
+    cargo run --bin {{ binary }} -- {{ args }}
+
+# Format code
+fmt:
+    cargo fmt --all
+
+# Check formatting
+fmt-check:
+    {{ exec }}cargo fmt --all -- --check
+
+# Clean build artifacts
+clean:
+    cargo clean
+
+# Update dependencies
+update:
+    cargo update
+
+# Audit dependencies
+audit:
+    {{ exec }}cargo audit
+
+# Generate documentation
+doc:
+    cargo doc --workspace --no-deps --all-features
+
+# Open documentation
+doc-open:
+    cargo doc --workspace --no-deps --all-features --open
+
+# Run clippy with auto-fix
+fix:
+    cargo clippy --fix --workspace --allow-dirty --allow-staged
+
+# Check justfile formatting
+fmt-check-just:
+    @just --fmt --check --unstable
