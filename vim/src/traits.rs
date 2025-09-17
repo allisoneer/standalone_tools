@@ -22,6 +22,18 @@ pub trait TextOps {
         let col = pos.col.min(self.line_len(line));
         Position { line, col }
     }
+
+    // Word motions - Phase 3
+    fn next_word_start(&self, pos: Position, count: u32) -> Position;
+    fn prev_word_start(&self, pos: Position, count: u32) -> Position;
+
+    // Paragraph motions - Phase 3
+    fn next_paragraph_start(&self, pos: Position, count: u32) -> Position;
+    fn prev_paragraph_start(&self, pos: Position, count: u32) -> Position;
+
+    // Find in current line - Phase 3
+    // find in current line; if before=true emulate 't', else 'f'
+    fn find_in_line(&self, pos: Position, ch: char, before: bool, count: u32) -> Option<Position>;
 }
 
 pub trait Clipboard {

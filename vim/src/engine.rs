@@ -26,8 +26,9 @@ impl Counts {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingKey {
     None,
-    G, // for 'gg' sequence
-    D, // for 'dd' sequence
+    G,                  // for 'gg' sequence
+    D,                  // for 'dd' sequence
+    F { before: bool }, // for 'f' and 't' find character motions
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +127,9 @@ impl Engine {
         cursor: Position,
         input: InputEvent,
     ) -> (Position, Vec<Command>) {
+        // Ensure cursor is within valid bounds before processing
+        let cursor = text.clamp(cursor);
+
         match (&self.mode, input) {
             (Mode::Insert, InputEvent::Key(ke)) => {
                 if let KeyCode::Esc = ke.code {
@@ -180,6 +184,34 @@ impl Engine {
                         };
                         let cmds = self.apply_delete(start, end_pos);
                         return (start, cmds);
+                    }
+                    (PendingKey::F { before }, KeyCode::Char(ch)) => {
+                        self.clear_pending();
+                        let count = self.counts.take_or(1);
+                        if let Some(pos) = text.find_in_line(cursor, ch, before, count) {
+                            // If operator is pending, apply it
+                            if let Some(op) = self.op_pending {
+                                self.clear_op();
+                                let cmds = match op {
+                                    Operator::Delete => {
+                                        // For 'f', include the target char; for 't', stop before
+                                        let end =
+                                            if before { pos } else { text.move_right(pos, 1) };
+                                        self.apply_delete(cursor, end)
+                                    }
+                                    Operator::Yank => vec![], // implement in Phase 4
+                                };
+                                return (cursor, cmds);
+                            } else {
+                                // Just move
+                                self.preferred_col = None;
+                                return (pos, vec![Command::SetCursor(pos)]);
+                            }
+                        } else {
+                            // Character not found, clear operator if any
+                            self.clear_op();
+                            return (cursor, vec![]);
+                        }
                     }
                     _ => {
                         // Clear pending if not matched
@@ -236,6 +268,28 @@ impl Engine {
                             if matches!(op, Operator::Delete) {
                                 end = text.move_right(end, 1);
                             }
+                        }
+                        KeyCode::Char('w') => {
+                            end = text.next_word_start(cursor, count);
+                        }
+                        KeyCode::Char('b') => {
+                            end = text.prev_word_start(cursor, count);
+                        }
+                        KeyCode::Char('{') => {
+                            end = text.prev_paragraph_start(cursor, count);
+                        }
+                        KeyCode::Char('}') => {
+                            end = text.next_paragraph_start(cursor, count);
+                        }
+                        KeyCode::Char('f') => {
+                            // Enter pending state for f motion
+                            self.pending = PendingKey::F { before: false };
+                            handled = false;
+                        }
+                        KeyCode::Char('t') => {
+                            // Enter pending state for t motion
+                            self.pending = PendingKey::F { before: true };
+                            handled = false;
                         }
                         _ => {
                             handled = false;
@@ -357,6 +411,38 @@ impl Engine {
                             }))],
                         )
                     }
+                    KeyCode::Char('w') => {
+                        let count = self.counts.take_or(1);
+                        let pos = text.next_word_start(cursor, count);
+                        self.preferred_col = None;
+                        (pos, vec![Command::SetCursor(pos)])
+                    }
+                    KeyCode::Char('b') => {
+                        let count = self.counts.take_or(1);
+                        let pos = text.prev_word_start(cursor, count);
+                        self.preferred_col = None;
+                        (pos, vec![Command::SetCursor(pos)])
+                    }
+                    KeyCode::Char('{') => {
+                        let count = self.counts.take_or(1);
+                        let pos = text.prev_paragraph_start(cursor, count);
+                        self.preferred_col = Some(0);
+                        (pos, vec![Command::SetCursor(pos)])
+                    }
+                    KeyCode::Char('}') => {
+                        let count = self.counts.take_or(1);
+                        let pos = text.next_paragraph_start(cursor, count);
+                        self.preferred_col = Some(0);
+                        (pos, vec![Command::SetCursor(pos)])
+                    }
+                    KeyCode::Char('f') => {
+                        self.pending = PendingKey::F { before: false };
+                        (cursor, vec![])
+                    }
+                    KeyCode::Char('t') => {
+                        self.pending = PendingKey::F { before: true };
+                        (cursor, vec![])
+                    }
                     KeyCode::Char('i') => {
                         self.mode = Mode::Insert;
                         self.counts.current = None;
@@ -453,7 +539,11 @@ impl Engine {
                     | KeyCode::Char('0')
                     | KeyCode::Char('$')
                     | KeyCode::Char('g')
-                    | KeyCode::Char('G') => {
+                    | KeyCode::Char('G')
+                    | KeyCode::Char('w')
+                    | KeyCode::Char('b')
+                    | KeyCode::Char('{')
+                    | KeyCode::Char('}') => {
                         // Handle movement
                         let count = self.counts.take_or(1);
                         let new_cursor = match ke.code {
@@ -505,6 +595,22 @@ impl Engine {
                                 };
                                 self.preferred_col = Some(0);
                                 text.line_start(target_line)
+                            }
+                            KeyCode::Char('w') => {
+                                self.preferred_col = None;
+                                text.next_word_start(cursor, count)
+                            }
+                            KeyCode::Char('b') => {
+                                self.preferred_col = None;
+                                text.prev_word_start(cursor, count)
+                            }
+                            KeyCode::Char('{') => {
+                                self.preferred_col = Some(0);
+                                text.prev_paragraph_start(cursor, count)
+                            }
+                            KeyCode::Char('}') => {
+                                self.preferred_col = Some(0);
+                                text.next_paragraph_start(cursor, count)
                             }
                             _ => cursor,
                         };

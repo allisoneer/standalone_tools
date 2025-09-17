@@ -30,6 +30,19 @@ impl MockBuffer {
     fn grapheme_count(&self, s: &str) -> u32 {
         s.graphemes(true).count() as u32
     }
+
+    fn graphemes_at_col(&self, line: u32, _col: u32) -> Vec<String> {
+        let s = self.line_str(line);
+        s.graphemes(true).map(|g| g.to_string()).collect()
+    }
+
+    fn is_word_char(ch: char) -> bool {
+        ch.is_alphanumeric() || ch == '_'
+    }
+
+    fn is_blank_line(&self, line: u32) -> bool {
+        self.line_str(line).trim().is_empty()
+    }
 }
 
 impl TextOps for MockBuffer {
@@ -94,5 +107,210 @@ impl TextOps for MockBuffer {
             0
         };
         Position { line, col }
+    }
+
+    fn next_word_start(&self, pos: Position, count: u32) -> Position {
+        let mut current_pos = pos;
+        let mut words_found = 0;
+
+        while words_found < count {
+            let found_word;
+            let mut in_word = false;
+
+            // Check if we're currently in a word
+            let graphemes = self.graphemes_at_col(current_pos.line, 0);
+            if let Some(grapheme) = graphemes.get(current_pos.col as usize)
+                && let Some(first_char) = grapheme.chars().next()
+            {
+                in_word = Self::is_word_char(first_char);
+            }
+
+            // Scan forward
+            loop {
+                let graphemes = self.graphemes_at_col(current_pos.line, 0);
+                let col = current_pos.col as usize;
+
+                // Move past current position
+                if col + 1 < graphemes.len() {
+                    current_pos.col += 1;
+                    if let Some(ch) = graphemes[current_pos.col as usize].chars().next() {
+                        let is_word = Self::is_word_char(ch);
+                        if !in_word && is_word {
+                            found_word = true;
+                            break;
+                        }
+                        in_word = is_word;
+                    }
+                } else {
+                    // Move to next line
+                    if current_pos.line + 1 < self.line_count() {
+                        current_pos.line += 1;
+                        current_pos.col = 0;
+                        let graphemes = self.graphemes_at_col(current_pos.line, 0);
+                        if let Some(grapheme) = graphemes.first()
+                            && let Some(ch) = grapheme.chars().next()
+                        {
+                            if Self::is_word_char(ch) {
+                                found_word = true;
+                                break;
+                            }
+                            in_word = Self::is_word_char(ch);
+                        }
+                    } else {
+                        // End of buffer
+                        return self.clamp(current_pos);
+                    }
+                }
+            }
+
+            if found_word {
+                words_found += 1;
+            }
+        }
+
+        self.clamp(current_pos)
+    }
+
+    fn prev_word_start(&self, pos: Position, count: u32) -> Position {
+        let mut current_pos = pos;
+        let mut words_found = 0;
+
+        while words_found < count {
+            let found_word;
+
+            // Move at least one position back
+            if current_pos.col > 0 {
+                current_pos.col -= 1;
+            } else if current_pos.line > 0 {
+                current_pos.line -= 1;
+                current_pos.col = self.line_len(current_pos.line).saturating_sub(1);
+            } else {
+                return Position { line: 0, col: 0 };
+            }
+
+            // Scan backward to find word start
+            loop {
+                let graphemes = self.graphemes_at_col(current_pos.line, 0);
+                if (current_pos.col as usize) < graphemes.len()
+                    && let Some(ch) = graphemes[current_pos.col as usize].chars().next()
+                    && Self::is_word_char(ch)
+                {
+                    // Check if this is the start of a word
+                    if current_pos.col == 0 {
+                        found_word = true;
+                        break;
+                    } else if let Some(prev_grapheme) = graphemes.get(current_pos.col as usize - 1)
+                        && let Some(prev_ch) = prev_grapheme.chars().next()
+                        && !Self::is_word_char(prev_ch)
+                    {
+                        found_word = true;
+                        break;
+                    }
+                }
+
+                // Move back
+                if current_pos.col > 0 {
+                    current_pos.col -= 1;
+                } else if current_pos.line > 0 {
+                    current_pos.line -= 1;
+                    current_pos.col = self.line_len(current_pos.line).saturating_sub(1);
+                } else {
+                    return Position { line: 0, col: 0 };
+                }
+            }
+
+            if found_word {
+                words_found += 1;
+            }
+        }
+
+        self.clamp(current_pos)
+    }
+
+    fn next_paragraph_start(&self, pos: Position, count: u32) -> Position {
+        let mut current_line = pos.line;
+        let mut paragraphs_found = 0;
+
+        while paragraphs_found < count && current_line < self.line_count() {
+            // Skip current paragraph (non-blank lines)
+            while current_line < self.line_count() && !self.is_blank_line(current_line) {
+                current_line += 1;
+            }
+
+            // Skip blank lines
+            while current_line < self.line_count() && self.is_blank_line(current_line) {
+                current_line += 1;
+            }
+
+            // If we found a non-blank line, that's the start of a paragraph
+            if current_line < self.line_count() {
+                paragraphs_found += 1;
+                if paragraphs_found == count {
+                    break;
+                }
+            }
+        }
+
+        if current_line >= self.line_count() {
+            current_line = self.line_count().saturating_sub(1);
+        }
+
+        self.line_start(current_line)
+    }
+
+    fn prev_paragraph_start(&self, pos: Position, count: u32) -> Position {
+        let mut current_line = pos.line;
+        let mut paragraphs_found = 0;
+
+        while paragraphs_found < count && current_line > 0 {
+            // Move to previous line
+            current_line = current_line.saturating_sub(1);
+
+            // Skip backward through current paragraph
+            while current_line > 0 && !self.is_blank_line(current_line) {
+                current_line = current_line.saturating_sub(1);
+            }
+
+            // Skip blank lines
+            while current_line > 0 && self.is_blank_line(current_line) {
+                current_line = current_line.saturating_sub(1);
+            }
+
+            // Find start of paragraph
+            while current_line > 0 && !self.is_blank_line(current_line.saturating_sub(1)) {
+                current_line = current_line.saturating_sub(1);
+            }
+
+            paragraphs_found += 1;
+        }
+
+        self.line_start(current_line)
+    }
+
+    fn find_in_line(&self, pos: Position, ch: char, before: bool, count: u32) -> Option<Position> {
+        let graphemes = self.graphemes_at_col(pos.line, 0);
+        let mut matches_found = 0;
+        let start_col = (pos.col + 1) as usize; // Start searching after current position
+
+        for (idx, grapheme) in graphemes.iter().enumerate().skip(start_col) {
+            if grapheme.chars().any(|c| c == ch) {
+                matches_found += 1;
+                if matches_found == count {
+                    let target_col = if before {
+                        // 't' behavior - stop before the character
+                        (idx as u32).saturating_sub(1).max(pos.col)
+                    } else {
+                        // 'f' behavior - stop on the character
+                        idx as u32
+                    };
+                    return Some(Position {
+                        line: pos.line,
+                        col: target_col,
+                    });
+                }
+            }
+        }
+
+        None
     }
 }
