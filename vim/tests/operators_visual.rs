@@ -5,6 +5,7 @@ use vim_mini::{
 
 mod support;
 use support::mock_buffer::MockBuffer;
+use support::mock_clipboard::MockClipboard;
 
 fn key(c: char) -> InputEvent {
     InputEvent::Key(KeyEvent {
@@ -24,13 +25,14 @@ fn esc() -> InputEvent {
 fn test_dd_deletes_line() {
     let buf = MockBuffer::new("line one\nline two\nline three\n");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 1, col: 0 };
 
     // dd on second line
-    let (_, cmds) = eng.handle_event(&buf, cur, key('d'));
+    let (_, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('d'));
     assert_eq!(cmds.len(), 0); // Operator pending
 
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('d'));
     assert_eq!(new_cur.line, 1);
     assert_eq!(new_cur.col, 0);
     assert_eq!(cmds.len(), 1);
@@ -41,12 +43,13 @@ fn test_dd_deletes_line() {
 fn test_count_dd_deletes_multiple_lines() {
     let buf = MockBuffer::new("line one\nline two\nline three\nline four\n");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 1, col: 0 };
 
     // 2dd should delete lines 2 and 3
-    eng.handle_event(&buf, cur, key('2'));
-    eng.handle_event(&buf, cur, key('d'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('d'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('2'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('d'));
 
     assert_eq!(new_cur.line, 1);
     assert_eq!(cmds.len(), 1);
@@ -60,9 +63,10 @@ fn test_count_dd_deletes_multiple_lines() {
 fn test_x_deletes_character() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('x'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('x'));
     assert_eq!(new_cur, cur);
     assert_eq!(cmds.len(), 1);
     if let Command::Delete { range } = &cmds[0] {
@@ -75,11 +79,12 @@ fn test_x_deletes_character() {
 fn test_count_x_deletes_multiple() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
     // 3x should delete "hel"
-    eng.handle_event(&buf, cur, key('3'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('x'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('3'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('x'));
     assert_eq!(new_cur, cur);
     assert_eq!(cmds.len(), 1);
     if let Command::Delete { range } = &cmds[0] {
@@ -92,9 +97,10 @@ fn test_count_x_deletes_multiple() {
 fn test_x_at_end_of_line() {
     let buf = MockBuffer::new("hi");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 2 }; // Past last character
 
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('x'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('x'));
     assert_eq!(new_cur, cur);
     assert_eq!(cmds.len(), 0); // Nothing to delete
 }
@@ -103,10 +109,11 @@ fn test_x_at_end_of_line() {
 fn test_dh_deletes_left() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 5 };
 
-    eng.handle_event(&buf, cur, key('d'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('h'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('h'));
     assert_eq!(new_cur.col, 4);
     assert_eq!(cmds.len(), 1);
     if let Command::Delete { range } = &cmds[0] {
@@ -119,10 +126,11 @@ fn test_dh_deletes_left() {
 fn test_dl_deletes_right() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
-    eng.handle_event(&buf, cur, key('d'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('l'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('l'));
     assert_eq!(new_cur, cur);
     assert_eq!(cmds.len(), 1);
     if let Command::Delete { range } = &cmds[0] {
@@ -135,10 +143,11 @@ fn test_dl_deletes_right() {
 fn test_dj_deletes_down() {
     let buf = MockBuffer::new("line one\nline two\nline three");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
-    eng.handle_event(&buf, cur, key('d'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('j'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('j'));
     assert_eq!(new_cur, cur);
     assert_eq!(cmds.len(), 1);
     if let Command::Delete { range } = &cmds[0] {
@@ -151,10 +160,11 @@ fn test_dj_deletes_down() {
 fn test_d0_deletes_to_line_start() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 5 };
 
-    eng.handle_event(&buf, cur, key('d'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('0'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('0'));
     assert_eq!(new_cur.col, 0);
     assert_eq!(cmds.len(), 1);
     if let Command::Delete { range } = &cmds[0] {
@@ -167,10 +177,11 @@ fn test_d0_deletes_to_line_start() {
 fn test_d_dollar_deletes_to_line_end() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 5 };
 
-    eng.handle_event(&buf, cur, key('d'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('$'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('$'));
     assert_eq!(new_cur, cur);
     assert_eq!(cmds.len(), 1);
     if let Command::Delete { range } = &cmds[0] {
@@ -183,9 +194,10 @@ fn test_d_dollar_deletes_to_line_end() {
 fn test_visual_charwise_mode() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
-    let (_, cmds) = eng.handle_event(&buf, cur, key('v'));
+    let (_, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('v'));
     assert_eq!(cmds.len(), 1);
     if let Command::SetSelection(Some(sel)) = &cmds[0] {
         assert_eq!(sel.start, cur);
@@ -202,9 +214,10 @@ fn test_visual_charwise_mode() {
 fn test_visual_linewise_mode() {
     let buf = MockBuffer::new("hello\nworld");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 2 };
 
-    let (_, cmds) = eng.handle_event(&buf, cur, key('V'));
+    let (_, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('V'));
     assert_eq!(cmds.len(), 1);
     if let Command::SetSelection(Some(sel)) = &cmds[0] {
         assert_eq!(sel.start.line, 0);
@@ -218,13 +231,14 @@ fn test_visual_linewise_mode() {
 fn test_visual_movement_updates_selection() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
     // Enter visual mode
-    eng.handle_event(&buf, cur, key('v'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('v'));
 
     // Move right
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('l'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('l'));
     assert_eq!(new_cur.col, 1);
     assert_eq!(cmds.len(), 2); // SetCursor and SetSelection
 
@@ -239,10 +253,11 @@ fn test_visual_movement_updates_selection() {
 fn test_visual_escape_exits() {
     let buf = MockBuffer::new("hello");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
-    eng.handle_event(&buf, cur, key('v'));
-    let (_, cmds) = eng.handle_event(&buf, cur, esc());
+    eng.handle_event(&buf, &mut clipboard, cur, key('v'));
+    let (_, cmds) = eng.handle_event(&buf, &mut clipboard, cur, esc());
     assert_eq!(cmds.len(), 1);
     assert!(matches!(cmds[0], Command::SetSelection(None)));
     assert_eq!(eng.snapshot().mode, Mode::Normal);
@@ -252,10 +267,11 @@ fn test_visual_escape_exits() {
 fn test_visual_v_toggles_off() {
     let buf = MockBuffer::new("hello");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
-    eng.handle_event(&buf, cur, key('v'));
-    let (_, cmds) = eng.handle_event(&buf, cur, key('v'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('v'));
+    let (_, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('v'));
     assert_eq!(cmds.len(), 1);
     assert!(matches!(cmds[0], Command::SetSelection(None)));
     assert_eq!(eng.snapshot().mode, Mode::Normal);
@@ -265,17 +281,18 @@ fn test_visual_v_toggles_off() {
 fn test_visual_delete() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
     // Enter visual mode
-    eng.handle_event(&buf, cur, key('v'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('v'));
 
     // Move to select "hello"
-    let (cur, _) = eng.handle_event(&buf, cur, key('4'));
-    let (cur, _) = eng.handle_event(&buf, cur, key('l'));
+    let (cur, _) = eng.handle_event(&buf, &mut clipboard, cur, key('4'));
+    let (cur, _) = eng.handle_event(&buf, &mut clipboard, cur, key('l'));
 
     // Delete selection
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('d'));
     assert_eq!(new_cur.col, 0);
 
     // Should have Delete and SetSelection(None) commands
@@ -294,16 +311,17 @@ fn test_visual_delete() {
 fn test_visual_line_delete() {
     let buf = MockBuffer::new("line one\nline two\nline three\n");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
     // Enter visual line mode
-    eng.handle_event(&buf, cur, key('V'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('V'));
 
     // Move down to select two lines
-    let (cur, _) = eng.handle_event(&buf, cur, key('j'));
+    let (cur, _) = eng.handle_event(&buf, &mut clipboard, cur, key('j'));
 
     // Delete selection
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('d'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('d'));
     assert_eq!(new_cur.line, 0);
     assert_eq!(new_cur.col, 0);
 
@@ -318,10 +336,11 @@ fn test_visual_line_delete() {
 fn test_operator_escape_cancels() {
     let buf = MockBuffer::new("hello");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
-    eng.handle_event(&buf, cur, key('d'));
-    let (_, cmds) = eng.handle_event(&buf, cur, esc());
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    let (_, cmds) = eng.handle_event(&buf, &mut clipboard, cur, esc());
     assert_eq!(cmds.len(), 0); // No delete should happen
     assert_eq!(eng.snapshot().mode, Mode::Normal);
 }
@@ -330,14 +349,15 @@ fn test_operator_escape_cancels() {
 fn test_gg_in_visual_mode() {
     let buf = MockBuffer::new("line one\nline two\nline three");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 2, col: 0 };
 
     // Enter visual mode at last line
-    eng.handle_event(&buf, cur, key('v'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('v'));
 
     // gg should move to first line
-    eng.handle_event(&buf, cur, key('g'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('g'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('g'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('g'));
     assert_eq!(new_cur.line, 0);
 
     // Check selection spans from first to last line
@@ -352,12 +372,13 @@ fn test_gg_in_visual_mode() {
 fn test_operator_pending_with_count() {
     let buf = MockBuffer::new("hello world");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let cur = Position { line: 0, col: 0 };
 
     // d3l should delete 3 characters
-    eng.handle_event(&buf, cur, key('d'));
-    eng.handle_event(&buf, cur, key('3'));
-    let (new_cur, cmds) = eng.handle_event(&buf, cur, key('l'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('d'));
+    eng.handle_event(&buf, &mut clipboard, cur, key('3'));
+    let (new_cur, cmds) = eng.handle_event(&buf, &mut clipboard, cur, key('l'));
     assert_eq!(new_cur, cur);
     assert_eq!(cmds.len(), 1);
 

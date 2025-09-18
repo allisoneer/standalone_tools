@@ -1,6 +1,7 @@
 use crate::key::{InputEvent, KeyCode};
-use crate::traits::TextOps;
+use crate::traits::{Clipboard, TextOps};
 use crate::types::{Command, Mode, Position, Range, Selection, VisualKind};
+use unicode_segmentation::UnicodeSegmentation;
 
 #[derive(Debug, Default, Clone)]
 struct Counts {
@@ -28,6 +29,7 @@ enum PendingKey {
     None,
     G,                  // for 'gg' sequence
     D,                  // for 'dd' sequence
+    Y,                  // for 'yy' sequence
     F { before: bool }, // for 'f' and 't' find character motions
 }
 
@@ -45,6 +47,7 @@ pub struct Engine {
     pending: PendingKey,
     op_pending: Option<Operator>,
     visual_anchor: Option<Position>, // when in Visual mode
+    last_yank_was_line: bool,        // track if last yank was linewise for paste behavior
 }
 
 #[derive(Debug, Clone)]
@@ -78,6 +81,7 @@ impl EngineBuilder {
             pending: PendingKey::None,
             op_pending: None,
             visual_anchor: None,
+            last_yank_was_line: false,
         }
     }
 }
@@ -121,9 +125,31 @@ impl Engine {
         vec![Command::Delete { range }]
     }
 
-    pub fn handle_event<T: TextOps>(
+    fn yank_range<T: TextOps, C: Clipboard>(
         &mut self,
         text: &T,
+        clipboard: &mut C,
+        start: Position,
+        end: Position,
+        is_line: bool,
+    ) {
+        let range = if start <= end {
+            Range { start, end }
+        } else {
+            Range {
+                start: end,
+                end: start,
+            }
+        };
+        let text_content = text.slice_to_string(range);
+        clipboard.set(text_content);
+        self.last_yank_was_line = is_line;
+    }
+
+    pub fn handle_event<T: TextOps, C: Clipboard>(
+        &mut self,
+        text: &T,
+        clipboard: &mut C,
         cursor: Position,
         input: InputEvent,
     ) -> (Position, Vec<Command>) {
@@ -185,6 +211,23 @@ impl Engine {
                         let cmds = self.apply_delete(start, end_pos);
                         return (start, cmds);
                     }
+                    (PendingKey::Y, KeyCode::Char('y')) => {
+                        self.clear_pending();
+                        self.clear_op();
+                        let count = self.counts.take_or(1);
+                        // Yank current line and next (count-1) lines
+                        let start = text.line_start(cursor.line);
+                        let end_line =
+                            (cursor.line + count - 1).min(text.line_count().saturating_sub(1));
+                        let end = text.line_end(end_line);
+                        // Include newline for line yanking
+                        let end_pos = Position {
+                            line: end.line + 1,
+                            col: 0,
+                        };
+                        self.yank_range(text, clipboard, start, end_pos, true);
+                        return (cursor, vec![]);
+                    }
                     (PendingKey::F { before }, KeyCode::Char(ch)) => {
                         self.clear_pending();
                         let count = self.counts.take_or(1);
@@ -199,13 +242,29 @@ impl Engine {
                                             if before { pos } else { text.move_right(pos, 1) };
                                         self.apply_delete(cursor, end)
                                     }
-                                    Operator::Yank => vec![], // implement in Phase 4
+                                    Operator::Yank => {
+                                        // For 'f', include the target char; for 't', stop before
+                                        let end =
+                                            if before { pos } else { text.move_right(pos, 1) };
+                                        self.yank_range(text, clipboard, cursor, end, false);
+                                        vec![]
+                                    }
                                 };
                                 return (cursor, cmds);
                             } else {
                                 // Just move
+                                let move_pos = if before {
+                                    // For 't', stop before the character
+                                    Position {
+                                        line: pos.line,
+                                        col: pos.col.saturating_sub(1),
+                                    }
+                                } else {
+                                    // For 'f', move to the character
+                                    pos
+                                };
                                 self.preferred_col = None;
-                                return (pos, vec![Command::SetCursor(pos)]);
+                                return (move_pos, vec![Command::SetCursor(move_pos)]);
                             }
                         } else {
                             // Character not found, clear operator if any
@@ -264,10 +323,8 @@ impl Engine {
                         }
                         KeyCode::Char('$') => {
                             end = text.line_end(cursor.line);
-                            // For line-end motion with delete, include the character
-                            if matches!(op, Operator::Delete) {
-                                end = text.move_right(end, 1);
-                            }
+                            // For line-end motion with operators, include the last character
+                            end = text.move_right(end, 1);
                         }
                         KeyCode::Char('w') => {
                             end = text.next_word_start(cursor, count);
@@ -299,7 +356,10 @@ impl Engine {
                     if handled {
                         let cmds = match op {
                             Operator::Delete => self.apply_delete(cursor, end),
-                            Operator::Yank => vec![], // implement in Phase 4
+                            Operator::Yank => {
+                                self.yank_range(text, clipboard, cursor, end, false);
+                                vec![]
+                            }
                         };
                         self.clear_op();
                         // Move cursor to start of deleted range
@@ -367,6 +427,7 @@ impl Engine {
                         (cursor, vec![])
                     }
                     KeyCode::Char('y') => {
+                        self.pending = PendingKey::Y; // to allow 'yy'
                         self.op_pending = Some(Operator::Yank);
                         (cursor, vec![])
                     }
@@ -380,6 +441,53 @@ impl Engine {
                         }
                         let cmds = self.apply_delete(cursor, end);
                         (cursor, cmds)
+                    }
+                    KeyCode::Char('p') => {
+                        let count = self.counts.take_or(1);
+                        if let Some(content) = clipboard.get() {
+                            let mut cmds = Vec::new();
+                            let mut insert_pos = if self.last_yank_was_line {
+                                // For linewise yank, paste on the next line
+                                Position {
+                                    line: cursor.line + 1,
+                                    col: 0,
+                                }
+                            } else {
+                                // For charwise yank, paste after cursor
+                                text.move_right(cursor, 1)
+                            };
+
+                            // Insert the content N times
+                            for _ in 0..count {
+                                cmds.push(Command::InsertText {
+                                    at: insert_pos,
+                                    text: content.clone(),
+                                });
+                                // Move insert position for next paste
+                                if self.last_yank_was_line {
+                                    let lines_in_content = content.matches('\n').count() as u32;
+                                    insert_pos.line += lines_in_content;
+                                } else {
+                                    let content_len = content.graphemes(true).count() as u32;
+                                    insert_pos.col += content_len;
+                                }
+                            }
+
+                            // Cursor position depends on what was pasted
+                            let new_cursor = if self.last_yank_was_line {
+                                Position {
+                                    line: cursor.line + 1,
+                                    col: 0,
+                                }
+                            } else {
+                                text.move_right(cursor, 1)
+                            };
+
+                            (new_cursor, cmds)
+                        } else {
+                            // No clipboard content
+                            (cursor, vec![])
+                        }
                     }
                     KeyCode::Char('v') => {
                         self.mode = Mode::Visual(VisualKind::CharWise);
@@ -688,6 +796,40 @@ impl Engine {
                             let mut result = cmds;
                             result.push(Command::SetSelection(None));
                             return (selection.0, result);
+                        }
+                    }
+                    KeyCode::Char('y') => {
+                        if let Some(anchor) = self.visual_anchor {
+                            let (selection, is_linewise) = match kind {
+                                VisualKind::CharWise => {
+                                    let (start, end) = if anchor <= cursor {
+                                        (anchor, cursor)
+                                    } else {
+                                        (cursor, anchor)
+                                    };
+                                    // For charwise visual, include the character under cursor
+                                    let end = text.move_right(end, 1);
+                                    ((start, end), false)
+                                }
+                                VisualKind::LineWise => {
+                                    let (start_line, end_line) = if anchor.line <= cursor.line {
+                                        (anchor.line, cursor.line)
+                                    } else {
+                                        (cursor.line, anchor.line)
+                                    };
+                                    let start = text.line_start(start_line);
+                                    // Include newline for line yanking
+                                    let end = Position {
+                                        line: end_line + 1,
+                                        col: 0,
+                                    };
+                                    ((start, end), true)
+                                }
+                            };
+                            self.yank_range(text, clipboard, selection.0, selection.1, is_linewise);
+                            self.mode = Mode::Normal;
+                            self.visual_anchor = None;
+                            return (cursor, vec![Command::SetSelection(None)]);
                         }
                     }
                     KeyCode::Char('f') => {

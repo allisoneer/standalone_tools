@@ -1,4 +1,4 @@
-use crate::types::Position;
+use crate::types::{Position, Range};
 
 pub trait TextOps {
     // Basic queries
@@ -34,6 +34,10 @@ pub trait TextOps {
     // Find in current line - Phase 3
     // find in current line; if before=true emulate 't', else 'f'
     fn find_in_line(&self, pos: Position, ch: char, before: bool, count: u32) -> Option<Position>;
+
+    // Text extraction - Phase 4
+    // Extract text from a range for yanking
+    fn slice_to_string(&self, range: Range) -> String;
 }
 
 pub trait Clipboard {

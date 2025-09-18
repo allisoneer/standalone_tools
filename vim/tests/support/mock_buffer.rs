@@ -1,7 +1,7 @@
 use ropey::Rope;
 use unicode_segmentation::UnicodeSegmentation;
 use vim_mini::traits::TextOps;
-use vim_mini::types::Position;
+use vim_mini::types::{Position, Range};
 
 pub struct MockBuffer {
     rope: Rope,
@@ -287,7 +287,7 @@ impl TextOps for MockBuffer {
         self.line_start(current_line)
     }
 
-    fn find_in_line(&self, pos: Position, ch: char, before: bool, count: u32) -> Option<Position> {
+    fn find_in_line(&self, pos: Position, ch: char, _before: bool, count: u32) -> Option<Position> {
         let graphemes = self.graphemes_at_col(pos.line, 0);
         let mut matches_found = 0;
         let start_col = (pos.col + 1) as usize; // Start searching after current position
@@ -296,21 +296,61 @@ impl TextOps for MockBuffer {
             if grapheme.chars().any(|c| c == ch) {
                 matches_found += 1;
                 if matches_found == count {
-                    let target_col = if before {
-                        // 't' behavior - stop before the character
-                        (idx as u32).saturating_sub(1).max(pos.col)
-                    } else {
-                        // 'f' behavior - stop on the character
-                        idx as u32
-                    };
+                    // Always return the position of the found character
+                    // The engine will decide how to use it based on 'f' or 't'
                     return Some(Position {
                         line: pos.line,
-                        col: target_col,
+                        col: idx as u32,
                     });
                 }
             }
         }
 
         None
+    }
+
+    fn slice_to_string(&self, range: Range) -> String {
+        if range.start == range.end {
+            return String::new();
+        }
+
+        let start_line = range.start.line as usize;
+        let end_line = range.end.line as usize;
+
+        if start_line == end_line {
+            // Single line case
+            let line = self.line_str(range.start.line);
+            let graphemes: Vec<&str> = line.graphemes(true).collect();
+            let start_col = range.start.col as usize;
+            let end_col = range.end.col.min(graphemes.len() as u32) as usize;
+
+            graphemes[start_col..end_col].join("")
+        } else {
+            // Multi-line case
+            let mut result = String::new();
+
+            // First line
+            let first_line = self.line_str(range.start.line);
+            let first_graphemes: Vec<&str> = first_line.graphemes(true).collect();
+            let start_col = range.start.col as usize;
+            result.push_str(&first_graphemes[start_col..].join(""));
+            result.push('\n');
+
+            // Middle lines
+            for line_idx in (start_line + 1)..end_line {
+                let line_ref = self.rope.line(line_idx);
+                result.push_str(line_ref.as_str().unwrap_or(""));
+            }
+
+            // Last line
+            if end_line < self.rope.len_lines() {
+                let last_line = self.line_str(range.end.line);
+                let last_graphemes: Vec<&str> = last_line.graphemes(true).collect();
+                let end_col = range.end.col.min(last_graphemes.len() as u32) as usize;
+                result.push_str(&last_graphemes[0..end_col].join(""));
+            }
+
+            result
+        }
     }
 }

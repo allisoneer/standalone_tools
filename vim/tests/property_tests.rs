@@ -4,6 +4,7 @@ use vim_mini::{Engine, InputEvent, KeyCode, KeyEvent, Modifiers, TextOps};
 
 mod support;
 use support::mock_buffer::MockBuffer;
+use support::mock_clipboard::MockClipboard;
 
 fn key(c: char) -> InputEvent {
     InputEvent::Key(KeyEvent {
@@ -66,6 +67,7 @@ proptest! {
     ) {
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         // Start from origin
         let start = Position { line: 0, col: 0 };
@@ -73,12 +75,12 @@ proptest! {
         // Apply count if > 0
         if count > 0 && count <= 9 {
             for digit in count.to_string().chars() {
-                let _ = eng.handle_event(&buf, start, key(digit));
+                let _ = eng.handle_event(&buf, &mut clipboard, start, key(digit));
             }
         }
 
         // Apply motion - should not panic
-        let (new_pos, _cmds) = eng.handle_event(&buf, start, key(motion));
+        let (new_pos, _cmds) = eng.handle_event(&buf, &mut clipboard, start, key(motion));
 
         // Verify position is within bounds
         assert!(new_pos.line < buf.line_count() || (new_pos.line == 0 && buf.line_count() == 0));
@@ -96,11 +98,12 @@ proptest! {
     ) {
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let start = Position { line: start_line, col: start_col };
 
         // Motion from potentially invalid position should not panic
-        let (new_pos, _cmds) = eng.handle_event(&buf, start, key(motion));
+        let (new_pos, _cmds) = eng.handle_event(&buf, &mut clipboard, start, key(motion));
 
         // Result should be valid
         assert!(new_pos.line < buf.line_count() || (new_pos.line == 0 && buf.line_count() == 0));
@@ -115,20 +118,21 @@ proptest! {
     ) {
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let start = Position { line: 0, col: 0 };
 
         // Set count
         if count > 1 {
-            let _ = eng.handle_event(&buf, start, key(char::from_digit(count, 10).unwrap_or('1')));
+            let _ = eng.handle_event(&buf, &mut clipboard, start, key(char::from_digit(count, 10).unwrap_or('1')));
         }
 
         // f or t
         let find_key = if before { 't' } else { 'f' };
-        let _ = eng.handle_event(&buf, start, key(find_key));
+        let _ = eng.handle_event(&buf, &mut clipboard, start, key(find_key));
 
         // Target character - should not panic even if not found
-        let (new_pos, _cmds) = eng.handle_event(&buf, start, key(target));
+        let (new_pos, _cmds) = eng.handle_event(&buf, &mut clipboard, start, key(target));
 
         // Position should be valid
         assert!(new_pos.line < buf.line_count() || (new_pos.line == 0 && buf.line_count() == 0));
@@ -141,14 +145,15 @@ proptest! {
     ) {
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let start = Position { line: 0, col: 0 };
 
         // Enter delete operator
-        let _ = eng.handle_event(&buf, start, key('d'));
+        let _ = eng.handle_event(&buf, &mut clipboard, start, key('d'));
 
         // Apply motion
-        let (_pos, cmds) = eng.handle_event(&buf, start, key(motion));
+        let (_pos, cmds) = eng.handle_event(&buf, &mut clipboard, start, key(motion));
 
         // Check all delete commands have valid ranges
         for cmd in cmds {
@@ -174,14 +179,15 @@ proptest! {
         let text = format!("{} {} {}", prefix, emoji, suffix);
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let start = Position { line: 0, col: 0 };
 
         // Move word forward - should handle emoji correctly
-        let (pos1, _) = eng.handle_event(&buf, start, key('w'));
+        let (pos1, _) = eng.handle_event(&buf, &mut clipboard, start, key('w'));
 
         // Move word forward again
-        let (pos2, _) = eng.handle_event(&buf, pos1, key('w'));
+        let (pos2, _) = eng.handle_event(&buf, &mut clipboard, pos1, key('w'));
 
         // Both positions should be valid
         assert!(pos1.line < buf.line_count());
@@ -202,11 +208,12 @@ proptest! {
         let text = lines.join("\n");
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let start = Position { line: 0, col: 0 };
 
         // Move to next paragraph - should not panic with any number of blanks
-        let (new_pos, _) = eng.handle_event(&buf, start, key('}'));
+        let (new_pos, _) = eng.handle_event(&buf, &mut clipboard, start, key('}'));
 
         assert!(new_pos.line < buf.line_count());
     }
@@ -219,17 +226,18 @@ proptest! {
     ) {
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let start = Position { line: 0, col: 0 };
 
         // Apply large count (only use first 2 digits to avoid overflow)
         let count_str = count.to_string();
         for digit in count_str.chars().take(2) {
-            let _ = eng.handle_event(&buf, start, key(digit));
+            let _ = eng.handle_event(&buf, &mut clipboard, start, key(digit));
         }
 
         // Motion with large count should clamp, not panic
-        let (new_pos, _) = eng.handle_event(&buf, start, key(motion));
+        let (new_pos, _) = eng.handle_event(&buf, &mut clipboard, start, key(motion));
 
         assert!(new_pos.line < buf.line_count() || (new_pos.line == 0 && buf.line_count() == 0));
     }
@@ -241,16 +249,17 @@ proptest! {
     ) {
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let mut pos = Position { line: 0, col: 0 };
 
         // Enter visual mode
-        let (p, _) = eng.handle_event(&buf, pos, key('v'));
+        let (p, _) = eng.handle_event(&buf, &mut clipboard, pos, key('v'));
         pos = p;
 
         // Apply series of motions
         for motion in motions {
-            let (p, cmds) = eng.handle_event(&buf, pos, key(motion));
+            let (p, cmds) = eng.handle_event(&buf, &mut clipboard, pos, key(motion));
             pos = p;
 
             // Check selection is valid
@@ -270,12 +279,13 @@ proptest! {
     ) {
         let buf = MockBuffer::new(&text);
         let mut eng = Engine::new();
+        let mut clipboard = MockClipboard::new();
 
         let mut pos = Position { line: 0, col: 0 };
 
         // Apply sequence of motions
         for motion in motions {
-            let (p, _) = eng.handle_event(&buf, pos, key(motion));
+            let (p, _) = eng.handle_event(&buf, &mut clipboard, pos, key(motion));
             pos = p;
             assert!(pos.line < buf.line_count() || (pos.line == 0 && buf.line_count() == 0));
         }
@@ -287,11 +297,12 @@ proptest! {
 fn empty_buffer_motions() {
     let buf = MockBuffer::new("");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let pos = Position { line: 0, col: 0 };
 
     // All motions should handle empty buffer gracefully
     for motion in ['h', 'j', 'k', 'l', 'w', 'b', '{', '}', '0', '$', 'G'] {
-        let (new_pos, _) = eng.handle_event(&buf, pos, key(motion));
+        let (new_pos, _) = eng.handle_event(&buf, &mut clipboard, pos, key(motion));
         assert_eq!(new_pos, Position { line: 0, col: 0 });
     }
 }
@@ -300,6 +311,7 @@ fn empty_buffer_motions() {
 fn single_char_buffer_motions() {
     let buf = MockBuffer::new("x");
     let mut eng = Engine::new();
+    let mut clipboard = MockClipboard::new();
     let pos = Position { line: 0, col: 0 };
 
     // Test all motions work on minimal buffer
@@ -312,7 +324,7 @@ fn single_char_buffer_motions() {
     ];
 
     for (motion, expected) in cases {
-        let (new_pos, _) = eng.handle_event(&buf, pos, key(motion));
+        let (new_pos, _) = eng.handle_event(&buf, &mut clipboard, pos, key(motion));
         assert_eq!(new_pos, expected, "Motion '{}' failed", motion);
     }
 }
