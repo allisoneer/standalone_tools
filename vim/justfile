@@ -77,3 +77,23 @@ fix:
 # Check justfile formatting
 fmt-check-just:
     @just --fmt --check --unstable
+
+# Run terminal UI example
+example-tui:
+    cargo run --example tui_crossterm
+
+# Run GUI example
+example-gui:
+    cargo run --example egui_app
+
+# Run both examples
+examples: example-tui example-gui
+
+# Run benchmarks
+bench:
+    cargo bench
+
+# Run benchmarks with HTML report
+bench-report:
+    cargo bench --bench keystrokes -- --verbose
+    @echo "Benchmark report generated at target/criterion/report/index.html"
