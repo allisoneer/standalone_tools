@@ -38,6 +38,11 @@ pub trait TextOps {
     // Text extraction - Phase 4
     // Extract text from a range for yanking
     fn slice_to_string(&self, range: Range) -> String;
+
+    // Search functionality - Phase 5
+    // Search forward/back from (line,col) including wrap; returns position at start of match
+    fn search_forward(&self, from: Position, needle: &str, wrap: bool) -> Option<Position>;
+    fn search_backward(&self, from: Position, needle: &str, wrap: bool) -> Option<Position>;
 }
 
 pub trait Clipboard {

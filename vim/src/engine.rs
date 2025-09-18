@@ -40,14 +40,22 @@ enum Operator {
 }
 
 #[derive(Debug, Clone)]
+struct SearchState {
+    query: String,
+    last_dir_forward: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct Engine {
     mode: Mode,
     preferred_col: Option<u32>,
     counts: Counts,
     pending: PendingKey,
     op_pending: Option<Operator>,
-    visual_anchor: Option<Position>, // when in Visual mode
-    last_yank_was_line: bool,        // track if last yank was linewise for paste behavior
+    visual_anchor: Option<Position>,  // when in Visual mode
+    last_yank_was_line: bool,         // track if last yank was linewise for paste behavior
+    search: Option<SearchState>,      // current search prompt state
+    last_search: Option<SearchState>, // last confirmed search
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +90,8 @@ impl EngineBuilder {
             op_pending: None,
             visual_anchor: None,
             last_yank_was_line: false,
+            search: None,
+            last_search: None,
         }
     }
 }
@@ -442,6 +452,37 @@ impl Engine {
                         let cmds = self.apply_delete(cursor, end);
                         (cursor, cmds)
                     }
+                    KeyCode::Char('n') => {
+                        if let Some(ref last) = self.last_search {
+                            let dir = last.last_dir_forward;
+                            let found = if dir {
+                                text.search_forward(cursor, &last.query, true)
+                            } else {
+                                text.search_backward(cursor, &last.query, true)
+                            };
+                            if let Some(pos) = found {
+                                self.preferred_col = None;
+                                return (pos, vec![Command::SetCursor(pos)]);
+                            }
+                        }
+                        (cursor, vec![])
+                    }
+                    KeyCode::Char('N') => {
+                        if let Some(ref last) = self.last_search {
+                            // Reverse direction
+                            let dir = !last.last_dir_forward;
+                            let found = if dir {
+                                text.search_forward(cursor, &last.query, true)
+                            } else {
+                                text.search_backward(cursor, &last.query, true)
+                            };
+                            if let Some(pos) = found {
+                                self.preferred_col = None;
+                                return (pos, vec![Command::SetCursor(pos)]);
+                            }
+                        }
+                        (cursor, vec![])
+                    }
                     KeyCode::Char('p') => {
                         let count = self.counts.take_or(1);
                         if let Some(content) = clipboard.get() {
@@ -549,6 +590,16 @@ impl Engine {
                     }
                     KeyCode::Char('t') => {
                         self.pending = PendingKey::F { before: true };
+                        (cursor, vec![])
+                    }
+                    KeyCode::Char('/') => {
+                        self.mode = Mode::SearchPrompt;
+                        self.search = Some(SearchState {
+                            query: String::new(),
+                            last_dir_forward: true,
+                        });
+                        self.counts.current = None;
+                        self.pending = PendingKey::None;
                         (cursor, vec![])
                     }
                     KeyCode::Char('i') => {
@@ -844,6 +895,45 @@ impl Engine {
                         // Unknown key in visual mode
                         return (cursor, vec![]);
                     }
+                }
+                (cursor, vec![])
+            }
+
+            (Mode::SearchPrompt, InputEvent::Key(ke)) => {
+                if let Some(ref mut search) = self.search {
+                    match ke.code {
+                        KeyCode::Esc => {
+                            // Cancel search
+                            self.mode = Mode::Normal;
+                            self.search = None;
+                            return (cursor, vec![]);
+                        }
+                        KeyCode::Enter => {
+                            // Confirm search and move to first match
+                            self.mode = Mode::Normal;
+                            let query = search.query.clone();
+                            self.last_search = self.search.take();
+
+                            // Search for first match
+                            if let Some(pos) = text.search_forward(cursor, &query, true) {
+                                self.preferred_col = None;
+                                return (pos, vec![Command::SetCursor(pos)]);
+                            }
+                            return (cursor, vec![]);
+                        }
+                        KeyCode::Backspace => {
+                            // Remove last character from query
+                            search.query.pop();
+                            return (cursor, vec![]);
+                        }
+                        _ => return (cursor, vec![]),
+                    }
+                }
+                (cursor, vec![])
+            }
+            (Mode::SearchPrompt, InputEvent::ReceivedChar(ch)) => {
+                if let Some(ref mut search) = self.search {
+                    search.query.push(ch);
                 }
                 (cursor, vec![])
             }

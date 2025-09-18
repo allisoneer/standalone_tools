@@ -353,4 +353,117 @@ impl TextOps for MockBuffer {
             result
         }
     }
+
+    fn search_forward(&self, from: Position, needle: &str, wrap: bool) -> Option<Position> {
+        if needle.is_empty() {
+            return None;
+        }
+
+        let total_lines = self.line_count() as usize;
+
+        // Search from current position to end of file
+        for line_idx in from.line as usize..total_lines {
+            let line = self.line_str(line_idx as u32);
+            let graphemes: Vec<&str> = line.graphemes(true).collect();
+
+            let start_col = if line_idx == from.line as usize {
+                (from.col + 1) as usize // Start searching after current position
+            } else {
+                0
+            };
+
+            // Search for needle in this line starting from start_col
+            for col in start_col..graphemes.len() {
+                let remaining = graphemes[col..].join("");
+                if remaining.starts_with(needle) {
+                    return Some(Position {
+                        line: line_idx as u32,
+                        col: col as u32,
+                    });
+                }
+            }
+        }
+
+        // If wrap is enabled, search from beginning to original position
+        if wrap {
+            for line_idx in 0..=from.line as usize {
+                let line = self.line_str(line_idx as u32);
+                let graphemes: Vec<&str> = line.graphemes(true).collect();
+
+                let end_col = if line_idx == from.line as usize {
+                    (from.col + 1) as usize
+                } else {
+                    graphemes.len()
+                };
+
+                for col in 0..end_col {
+                    let remaining = graphemes[col..].join("");
+                    if remaining.starts_with(needle) {
+                        return Some(Position {
+                            line: line_idx as u32,
+                            col: col as u32,
+                        });
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    fn search_backward(&self, from: Position, needle: &str, wrap: bool) -> Option<Position> {
+        if needle.is_empty() {
+            return None;
+        }
+
+        // Search from current position backward to beginning of file
+        for line_idx in (0..=from.line as usize).rev() {
+            let line = self.line_str(line_idx as u32);
+            let graphemes: Vec<&str> = line.graphemes(true).collect();
+
+            let end_col = if line_idx == from.line as usize {
+                from.col as usize // Search up to (not including) current position
+            } else {
+                graphemes.len()
+            };
+
+            // Search backward in this line
+            for col in (0..end_col).rev() {
+                let remaining = graphemes[col..].join("");
+                if remaining.starts_with(needle) {
+                    return Some(Position {
+                        line: line_idx as u32,
+                        col: col as u32,
+                    });
+                }
+            }
+        }
+
+        // If wrap is enabled, search from end backward to original position
+        if wrap {
+            let total_lines = self.line_count() as usize;
+            for line_idx in ((from.line as usize)..total_lines).rev() {
+                let line = self.line_str(line_idx as u32);
+                let graphemes: Vec<&str> = line.graphemes(true).collect();
+
+                let start_col = if line_idx == from.line as usize {
+                    from.col as usize
+                } else {
+                    0
+                };
+
+                for col in (start_col..graphemes.len()).rev() {
+                    let remaining = graphemes[col..].join("");
+                    if remaining.starts_with(needle) {
+                        return Some(Position {
+                            line: line_idx as u32,
+                            col: col as u32,
+                        });
+                    }
+                }
+            }
+        }
+
+        None
+    }
 }
