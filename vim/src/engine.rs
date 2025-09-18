@@ -45,6 +45,34 @@ struct SearchState {
     last_dir_forward: bool,
 }
 
+/// The main vim engine that processes input events and maintains modal state.
+///
+/// The Engine is the core of the vim_mini library. It maintains the current mode,
+/// handles key sequences, manages operator-pending states, and emits commands
+/// that the host application should apply to their text buffer.
+///
+/// # Examples
+///
+/// ```no_run
+/// use vim_mini::{Engine, InputEvent, KeyCode, KeyEvent};
+/// # use vim_mini::traits::{TextOps, Clipboard};
+/// # use vim_mini::types::Position;
+/// # struct MyBuffer;
+/// # impl TextOps for MyBuffer { /* ... */ }
+/// # struct MyClipboard;
+/// # impl Clipboard for MyClipboard { /* ... */ }
+///
+/// let mut engine = Engine::new();
+/// let buffer = MyBuffer;
+/// let mut clipboard = MyClipboard;
+/// let cursor = Position::ZERO;
+///
+/// let input = InputEvent::Key(KeyEvent {
+///     code: KeyCode::Char('j'),
+///     mods: Default::default()
+/// });
+/// let (new_cursor, commands) = engine.handle_event(&buffer, &mut clipboard, cursor, input);
+/// ```
 #[derive(Debug, Clone)]
 pub struct Engine {
     mode: Mode,
@@ -58,13 +86,30 @@ pub struct Engine {
     last_search: Option<SearchState>, // last confirmed search
 }
 
+/// A snapshot of the engine's current state.
+///
+/// This can be used for debugging or displaying the current state in a UI.
 #[derive(Debug, Clone)]
 pub struct EngineSnapshot {
+    /// The current mode of the engine.
     pub mode: Mode,
+    /// The preferred column for vertical movements.
     pub preferred_col: Option<u32>,
+    /// Any pending count entered before a command.
     pub pending_count: Option<u32>,
 }
 
+/// Builder for creating an Engine with custom initial state.
+///
+/// # Examples
+///
+/// ```
+/// use vim_mini::{EngineBuilder, Mode};
+///
+/// let engine = EngineBuilder::default()
+///     .mode(Mode::Insert)
+///     .build();
+/// ```
 pub struct EngineBuilder {
     mode: Mode,
 }
@@ -76,11 +121,13 @@ impl Default for EngineBuilder {
 }
 
 impl EngineBuilder {
+    /// Set the initial mode for the engine.
     pub fn mode(mut self, mode: Mode) -> Self {
         self.mode = mode;
         self
     }
 
+    /// Build the Engine with the configured settings.
     pub fn build(self) -> Engine {
         Engine {
             mode: self.mode,
@@ -103,10 +150,12 @@ impl Default for Engine {
 }
 
 impl Engine {
+    /// Create a new Engine with default settings (Normal mode).
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Get a snapshot of the current engine state.
     pub fn snapshot(&self) -> EngineSnapshot {
         EngineSnapshot {
             mode: self.mode,
@@ -156,6 +205,22 @@ impl Engine {
         self.last_yank_was_line = is_line;
     }
 
+    /// Process an input event and return the new cursor position and commands.
+    ///
+    /// This is the main entry point for processing vim input. It takes the current
+    /// text buffer state, clipboard, cursor position, and an input event, then
+    /// returns the new cursor position and a list of commands to apply.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The text buffer implementing TextOps
+    /// * `clipboard` - The clipboard for yank/paste operations
+    /// * `cursor` - The current cursor position
+    /// * `input` - The input event to process
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (new_cursor_position, commands_to_apply)
     pub fn handle_event<T: TextOps, C: Clipboard>(
         &mut self,
         text: &T,
