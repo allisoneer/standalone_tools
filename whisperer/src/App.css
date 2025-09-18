@@ -1,0 +1,291 @@
+.app {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.recording-section {
+  background: #f5f5f5;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 30px;
+}
+
+.recording-controls {
+  text-align: center;
+}
+
+.controls-group {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.status {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #666;
+}
+
+.recording-indicator {
+  color: #f00;
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.recordings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recording-item {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 15px;
+}
+
+.recording-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.recording-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.transcription-content {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+.transcription-text {
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.transcription-meta {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  gap: 15px;
+}
+
+.settings-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-content {
+  background: white;
+  padding: 30px;
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90%;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.form-group small {
+  display: block;
+  margin-top: 5px;
+  color: #666;
+  font-size: 12px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* Button styles */
+.btn-primary,
+.btn-secondary,
+.btn-danger,
+.btn-small,
+.btn-icon {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-primary {
+  background: #007bff;
+  color: white;
+}
+
+.btn-secondary {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-small {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.btn-icon {
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid #ddd;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.empty-state {
+  text-align: center;
+  color: #666;
+  padding: 40px;
+}
+
+/* File upload button styling */
+.controls-idle {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Drag and drop overlay */
+.app.dragging {
+  position: relative;
+}
+
+.drop-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(59, 130, 246, 0.1);
+  border: 3px dashed #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.drop-message {
+  font-size: 24px;
+  color: #3b82f6;
+  font-weight: 600;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Recording source icons and metadata */
+.recording-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.recording-icon {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.recording-details {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.recording-format {
+  background: #e5e7eb;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.recording-duration {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.recording-filename {
+  font-size: 13px;
+  color: #6b7280;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 300px;
+  margin-right: 15px;
+}
+
+/* Upload progress indicator */
+.upload-progress {
+  background: #eff6ff;
+  border: 1px solid #3b82f6;
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+/* Button styling adjustment for secondary button */
+.btn-secondary.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

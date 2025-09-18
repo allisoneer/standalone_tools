@@ -1,0 +1,197 @@
+#!/bin/bash
+# agent-wrap - Minimal output wrapper for just commands
+# Provides token-efficient output for AI agents
+
+set -euo pipefail
+
+# Get output mode from environment, default to minimal
+OUTPUT_MODE="${OUTPUT_MODE:-minimal}"
+
+# Determine task name from command
+TASK_NAME="task"
+if [[ $# -gt 0 ]]; then
+    case "$1" in
+        cargo)
+            if [[ $# -gt 1 ]]; then
+                case "$2" in
+                    nextest)
+                        if [[ $# -gt 2 ]] && [[ "$3" == "run" ]]; then
+                            TASK_NAME="test"
+                        fi
+                        ;;
+                    test) TASK_NAME="test" ;;
+                    build) TASK_NAME="build" ;;
+                    check) TASK_NAME="check" ;;
+                    clippy) TASK_NAME="clippy" ;;
+                    fmt) TASK_NAME="fmt-check" ;;
+                    machete) TASK_NAME="machete" ;;
+                    *) TASK_NAME="$2" ;;
+                esac
+            fi
+            ;;
+        npm|bun)
+            if [[ $# -gt 1 ]]; then
+                TASK_NAME="$2"
+            fi
+            ;;
+        *)
+            TASK_NAME=$(basename "$1")
+            ;;
+    esac
+fi
+
+# Helper function to extract test counts
+extract_test_count() {
+    echo "$1" | grep -E "([0-9]+) passed" | tail -1 | grep -oE "[0-9]+ passed" || echo "completed"
+}
+
+# Extract last lines of output, trying to keep error blocks intact
+smart_tail() {
+    local output="$1"
+    local max_lines=60
+    local default_lines=30
+
+    # Count total lines
+    local total_lines=$(echo "$output" | wc -l)
+
+    # If output is reasonably sized, show it all
+    if [[ $total_lines -le $max_lines ]]; then
+        echo "$output"
+        echo ""
+        echo "[Showing all $total_lines lines]"
+        return
+    fi
+
+    # Otherwise, get last N lines but try to respect block boundaries
+    local tail_output=$(echo "$output" | tail -$default_lines)
+
+    # Adjust to include any leading whitespace context
+    # Look for the first non-indented line in our tail output
+    local first_line=$(echo "$tail_output" | head -1)
+    if [[ "$first_line" =~ ^[[:space:]] ]]; then
+        # First line is indented, try to grab a few more lines to get context
+        local extra_lines=10
+        tail_output=$(echo "$output" | tail -$((default_lines + extra_lines)))
+
+        # Find the last line that starts at column 0 before our content
+        local lines_array=()
+        while IFS= read -r line; do
+            lines_array+=("$line")
+        done <<< "$tail_output"
+
+        local start_idx=0
+        for ((i=0; i<${#lines_array[@]}; i++)); do
+            if [[ ! "${lines_array[$i]}" =~ ^[[:space:]] ]] && [[ -n "${lines_array[$i]}" ]]; then
+                start_idx=$i
+            fi
+            # Stop looking after we find our original position
+            if [[ $i -ge $extra_lines ]]; then
+                break
+            fi
+        done
+
+        # Output from the last block start
+        tail_output=""
+        for ((i=$start_idx; i<${#lines_array[@]}; i++)); do
+            tail_output="${tail_output}${lines_array[$i]}"$'\n'
+        done
+        tail_output=${tail_output%$'\n'} # Remove trailing newline
+    fi
+
+    # Count lines we're showing
+    local shown_lines=$(echo "$tail_output" | wc -l)
+
+    echo "$tail_output"
+    echo ""
+    echo "[Showing last $shown_lines lines of $total_lines total]"
+}
+
+
+case "$OUTPUT_MODE" in
+    minimal)
+        # Capture output and exit code
+        OUTPUT=$(mktemp)
+        if "$@" > "$OUTPUT" 2>&1; then
+            # Success - minimal feedback
+            case "$TASK_NAME" in
+                test*|check*)
+                    RESULT=$(extract_test_count "$(cat "$OUTPUT")")
+                    echo "✓ $TASK_NAME: $RESULT"
+                    ;;
+                build*)
+                    echo "✓ $TASK_NAME: built"
+                    ;;
+                *)
+                    echo "✓ $TASK_NAME"
+                    ;;
+            esac
+        else
+            # Failure - show smart tail of output
+            exit_code=$?
+            echo "✗ $TASK_NAME failed with exit code $exit_code"
+            echo ""
+            smart_tail "$(cat "$OUTPUT")"
+
+            rm -f "$OUTPUT"
+            exit $exit_code
+        fi
+        rm -f "$OUTPUT"
+        ;;
+
+    json)
+        # Structured JSON output
+        start_time=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        start_ms=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+
+        OUTPUT=$(mktemp)
+        if "$@" > "$OUTPUT" 2>&1; then
+            end_ms=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+            duration=$((end_ms - start_ms))
+
+            # Extract summary info for JSON
+            test_count=$(extract_test_count "$(cat "$OUTPUT")" | grep -oE "[0-9]+" || echo "0")
+
+            cat <<EOF
+{
+  "task": "$TASK_NAME",
+  "status": "success",
+  "exit_code": 0,
+  "duration_ms": $duration,
+  "timestamp": "$start_time",
+  "summary": {
+    "tests_passed": $test_count
+  }
+}
+EOF
+        else
+            exit_code=$?
+            end_ms=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+            duration=$((end_ms - start_ms))
+            error=$(echo "Command failed - see output" | jq -Rs . 2>/dev/null || echo "\"failed\"")
+
+            cat <<EOF
+{
+  "task": "$TASK_NAME",
+  "status": "failure",
+  "exit_code": $exit_code,
+  "duration_ms": $duration,
+  "timestamp": "$start_time",
+  "error": $error
+}
+EOF
+            rm -f "$OUTPUT"
+            exit $exit_code
+        fi
+        rm -f "$OUTPUT"
+        ;;
+
+    normal|verbose)
+        # Pass through - full output
+        exec "$@"
+        ;;
+
+    *)
+        echo "Error: Unknown OUTPUT_MODE: $OUTPUT_MODE"
+        exit 1
+        ;;
+esac

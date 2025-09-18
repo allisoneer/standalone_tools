@@ -1,0 +1,47 @@
+[package]
+name = "vim_mini"
+version = "0.1.0"
+edition = "2024"
+authors = ["Your Name <you@example.com>"]
+license = "MIT OR Apache-2.0"
+description = "A minimal, high-performance Vim-like modal input engine"
+repository = "https://github.com/yourusername/vim_mini"
+documentation = "https://docs.rs/vim_mini"
+readme = "README.md"
+keywords = ["vim", "modal", "editor", "text", "input"]
+categories = ["text-editors", "gui"]
+
+[package.metadata.cargo-machete]
+ignored = ["arboard"]
+
+[features]
+default = []
+# Enable system clipboard integration
+clipboard = ["arboard"]
+
+[dependencies]
+unicode-segmentation = "1.10"
+bitflags = "2.4"
+arboard = { version = "3.3", optional = true }
+
+[dev-dependencies]
+proptest = "1.5"
+ropey = "1.6"
+criterion = { version = "0.5", features = ["html_reports"] }
+# For examples
+crossterm = "0.27"
+ratatui = "0.26"
+eframe = "0.27"
+egui = "0.27"
+
+[[example]]
+name = "tui_crossterm"
+required-features = []
+
+[[example]]
+name = "egui_app"
+required-features = []
+
+[[bench]]
+name = "keystrokes"
+harness = false
